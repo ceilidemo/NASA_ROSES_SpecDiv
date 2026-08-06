@@ -1,0 +1,27 @@
+{
+    "id": "0559174F",
+    "path": "C:/Users/ceilidemarais/Projects/NASA_ROSES_SpecDiv/NEON_PlantDiv/scripts/04_FuncDiv.R",
+    "project_path": "NEON_PlantDiv/scripts/04_FuncDiv.R",
+    "type": "r_source",
+    "hash": "1479163164",
+    "contents": "",
+    "dirty": false,
+    "created": 1786044705746.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "266,0",
+        "scrollLine": "224"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1786051785,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1786051785520,
+    "read_only": false,
+    "read_only_alternatives": []
+}
