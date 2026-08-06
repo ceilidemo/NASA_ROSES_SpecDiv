@@ -1,30 +1,30 @@
 # 01_EMIT_Run: Script for processing tiles and calculating specdiv for EMIT sites
 
-library(sp)
-library(raster)
 library(tidyverse)
 library(ncdf4)
 library(adespatial)
-
-# Download all EMIT tiles through AppEEARS
-  # Download the sampling boundaries through NEON's data portal and upload to AppEEARS
-  # Set dates etc. 
+library(terra)
 
 # set wd
-setwd(dir = "EMIT_SpecDiv/")
+setwd("~/EMIT_specdiv")
 
 # pull in the specdiv functions
 source("scripts/00_Specdiv_Func.R")
 
+# Create a local, safe directory for temp files and register it with terra
+temp_dir <- file.path(getwd(), "data_work/r_temp")
+dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
+terraOptions(tempdir = temp_dir, memfrac = 0.8)
 
 # Base for year of choice
-base_path <- "data_in/2023_samplingBoundary"
+base_path <- "data_in/2024_samplingBoundary"
 
-# Set up output paths
+# Set up output paths (and ensure results folder exists)
 results_csv <- "data_out/results/EMIT_SpecDiv_ssmplingBoundary_2023.csv"
-dir.create("data_out/results_2023", recursive = TRUE, showWarnings = FALSE)
-dir.create("data_out/maps_2023", recursive = TRUE, showWarnings = FALSE)
-dir.create("data_work/new_cubes_2023", recursive = TRUE, showWarnings = FALSE)
+dir.create(dirname(results_csv), recursive = TRUE, showWarnings = FALSE)
+dir.create("data_out/results_2024", recursive = TRUE, showWarnings = FALSE)
+dir.create("data_out/maps_2024", recursive = TRUE, showWarnings = FALSE)
+dir.create("data_work/new_cubes_2024", recursive = TRUE, showWarnings = FALSE)
 
 # Get all site directories
 site_dirs <- list.dirs(base_path, full.names = TRUE, recursive = FALSE)
@@ -34,136 +34,98 @@ results <- list()
 for (site_dir in site_dirs) {
   site <- basename(site_dir)
   
-  # list the nc files
   nc_files <- list.files(site_dir, pattern = "\\.nc$", full.names = TRUE)
   num_files <- length(nc_files)
   
-  # catch error
   if (num_files == 0) {
     message("Nothin there for: ", site)
     next
   }
   
-  # Loop through each file for the site 
   for (f_idx in 1:num_files) {
     nc_file <- nc_files[f_idx]
     file_name <- basename(nc_file)
-    
-    # If there's more than one file, append _1, _2, etc. 
     site_suffix <- if (num_files > 1) paste0(site, "_", f_idx) else site
     
-    out_tif <- file.path("data_work/new_cubes_2023", paste0(site_suffix, "_hyperspectral_cube.tif"))
+    message("Processing NetCDF and calculating div for: ", site_suffix)
     
-    # STEP 1! Process NetCDF to GeoTIFF
-    if (!file.exists(out_tif)) {
-      message("Processing NetCDF for: ", site_suffix)
+    tryCatch({
+      gc()
+      dat <- nc_open(nc_file)
+      wavelengths <- ncvar_get(dat, "wavelengths")
+      hyperspectral_cube <- ncvar_get(dat, "reflectance") # dimensions: [lon, lat, bands]
+      nc_close(dat)
       
-      tryCatch({
-        dat <- nc_open(nc_file)
-        wavelengths <- ncvar_get(dat, "wavelengths")
-        hyperspectral_cube <- ncvar_get(dat, "reflectance")
-        
-        # Masking out atmospheric water vapor absorption bands and ends
-        wvl_df <- data.frame(index = 1:length(wavelengths), wvl = wavelengths)
-        good_indices <- wvl_df %>%
-          filter(wvl > 400 & wvl < 2450) %>%
-          filter(!(wvl > 1320 & wvl < 1440)) %>%
-          filter(!(wvl > 1770 & wvl < 1970)) %>%
-          pull(index)
-        
-        # Build stack with good bands
-        hyperspectral_stack <- stack(lapply(good_indices, function(b) {
-          r <- raster(hyperspectral_cube[, , b])
-          r[r < 0] <- 0   # Force negative artifacts to 0
-          return(r)
-        }))
-        
-        writeRaster(hyperspectral_stack, out_tif, format = "GTiff", overwrite = TRUE)
-        nc_close(dat)
-        message("Saved tif with ", length(good_indices), " bands.")
-        
-      }, error = function(e) { 
-        message("Skipping conversion for ", site_suffix, ": ", e$message) 
-      })
-    }
-    
-    # STEP 2! Calculate Spectral Turnover & Dispersion
-    if (file.exists(out_tif)) {
-      message("Calculating div for ", site_suffix)
+      # Masking out atmospheric water vapor absorption bands
+      wvl_df <- data.frame(index = 1:length(wavelengths), wvl = wavelengths)
+      good_indices <- wvl_df %>%
+        filter(wvl > 400 & wvl < 2450) %>%
+        filter(!(wvl > 1320 & wvl < 1440)) %>%
+        filter(!(wvl > 1770 & wvl < 1970)) %>%
+        pull(index)
       
-      tryCatch({
-        cube <- readAll(brick(out_tif)) 
-        cube_norm <- bright_norm(cube)
-        
-        # Calculate dispersion, pairwise beta diversity, aggregated dispersion, and aggregated pairwise metrics
-        disp_res <- beta_diversity_dispersion(cube_norm)
-        PW_res <- beta_diversity_pairwise(cube_norm) 
-        agg_res <- beta_diversity_aggregated(cube_norm, agg_factor = 10)
-        agg_PW_res <- beta_diversity_pairwise_aggregated(cube_norm, agg_factor = 10)
-        
-        # Create a row for this specific tile
-        site_row <- data.frame(
-          site = site_suffix,
-          original_file = file_name,
-          sum_squares = disp_res$sum_squares,
-          Beta_dispersion = disp_res$beta_dispersion,
-          Beta_avg_pairwise = PW_res$avg_beta_pairwise,
-          agg_factor_used = agg_res$agg_factor_used,
-          gamma_sum_squares = agg_res$gamma_sum_squares,
-          gamma_dispersion = agg_res$gamma_dispersion,
-          beta_agg_sum_squares = agg_res$beta_agg_sum_squares,
-          beta_agg_dispersion = agg_res$beta_agg_dispersion,
-          Beta_agg_avg_pairwise = agg_PW_res$avg_beta_pairwise,
-          n_aggregate_pixels = agg_res$n_aggregate_pixels,
-          timestamp = Sys.time()
-        )
-        
-        # Append rows to the primary output CSV as it goes
-        write.table(site_row, results_csv, 
-                    append = file.exists(results_csv), 
-                    sep = ",", row.names = FALSE, 
-                    col.names = !file.exists(results_csv))
-        
-        # Save LCBD map if available
-        if (!is.null(PW_res$lcbd_map)) {
-          writeRaster(PW_res$lcbd_map, 
-                      file.path("data_out/maps_2023", paste0(site_suffix, "_uniqueness.tif")), 
-                      overwrite = TRUE)
-          message("-> Saved uniqueness map for: ", site_suffix)
-        }
-        
-        # Save aggregated LCBD map if available
-        if (!is.null(agg_res$lcbd_agg_map)) {
-          writeRaster(agg_res$lcbd_agg_map, 
-                      file.path("data_out/maps_2023", paste0(site_suffix, "_agg_uniqueness.tif")), 
-                      overwrite = TRUE)
-          message("-> Saved aggregated uniqueness map for: ", site_suffix)
-        }
-        
-        # Save aggregated pairwise LCBD map if available
-        if (!is.null(agg_PW_res$lcbd_map)) {
-          writeRaster(agg_PW_res$lcbd_map, 
-                      file.path("data_out/maps_2023", paste0(site_suffix, "_agg_pw_uniqueness.tif")), 
-                      overwrite = TRUE)
-          message("-> Saved aggregated pairwise uniqueness map for: ", site_suffix)
-        }
-        
-        # Store structured list for final backup df export
-        results[[site_suffix]] <- list(disp_res = disp_res, PW_res = PW_res, agg_res = agg_res, agg_PW_res = agg_PW_res)
-        message("SUCCESS for: ", site_suffix)
-        
-        # Clean up memory explicitly per iteration
-        rm(cube, cube_norm, disp_res, PW_res, agg_res, agg_PW_res, site_row)
-        gc() 
-        
-      }, error = function(e) {
-        message("ERROR processing diversity metrics for ", site_suffix, ": ", e$message)
-      })
-    }
+      sub_cube <- hyperspectral_cube[, , good_indices]
+      sub_cube[sub_cube < 0] <- 0
+      
+      # Permute dimensions from [lon, lat, bands] to terra's expected [lat, lon, bands] layout
+      arr_permuted <- aperm(sub_cube, c(2, 1, 3))
+      
+      # Build SpatRaster directly from the 3D array in memory
+      cube <- rast(arr_permuted)
+      
+      # Run diversity pipeline directly on the in-memory SpatRaster
+      cube_norm <- bright_norm(cube)
+      
+      disp_res <- beta_diversity_dispersion(cube_norm)
+      PW_res <- beta_diversity_pairwise(cube_norm) 
+      agg_res <- beta_diversity_dispersion_aggregated(cube_norm, agg_factor = 10)
+      agg_PW_res <- beta_diversity_pairwise_aggregated(cube_norm, agg_factor = 10)
+      
+      site_row <- data.frame(
+        site = site_suffix,
+        original_file = file_name,
+        sum_squares = disp_res$sum_squares,
+        Beta_dispersion = disp_res$beta_dispersion,
+        Beta_avg_pairwise = PW_res$avg_beta_pairwise,
+        agg_factor_used = agg_res$agg_factor_used,
+        gamma_sum_squares = agg_res$gamma_sum_squares,
+        gamma_dispersion = agg_res$gamma_dispersion,
+        beta_agg_sum_squares = agg_res$beta_agg_sum_squares,
+        beta_agg_dispersion = agg_res$beta_agg_dispersion,
+        Beta_agg_avg_pairwise = agg_PW_res$avg_beta_pairwise,
+        n_aggregate_pixels = agg_res$n_aggregate_pixels,
+        timestamp = Sys.time()
+      )
+      
+      write.table(site_row, results_csv, 
+                  append = file.exists(results_csv), 
+                  sep = ",", row.names = FALSE, 
+                  col.names = !file.exists(results_csv))
+      
+      # Save maps out safely
+      if (!is.null(PW_res$lcbd_map)) {
+        terra::writeRaster(PW_res$lcbd_map, file.path("data_out/maps_2023", paste0(site_suffix, "_uniqueness.tif")), overwrite = TRUE)
+      }
+      if (!is.null(agg_res$lcbd_agg_map)) {
+        terra::writeRaster(agg_res$lcbd_agg_map, file.path("data_out/maps_2023", paste0(site_suffix, "_agg_uniqueness.tif")), overwrite = TRUE)
+      }
+      if (!is.null(agg_PW_res$lcbd_map)) {
+        terra::writeRaster(agg_PW_res$lcbd_map, file.path("data_out/maps_2023", paste0(site_suffix, "_agg_pw_uniqueness.tif")), overwrite = TRUE)
+      }
+      
+      results[[site_suffix]] <- list(disp_res = disp_res, PW_res = PW_res, agg_res = agg_res, agg_PW_res = agg_PW_res)
+      message("SUCCESS for: ", site_suffix)
+      
+      rm(cube, cube_norm, sub_cube, arr_permuted, disp_res, PW_res, agg_res, agg_PW_res, site_row)
+      gc() 
+      
+    }, error = function(e) {
+      message("ERROR processing diversity metrics for ", site_suffix, ": ", e$message)
+    })
   }
 }
 
-# STEP 3! Save it bb
+# STEP 3: Save final combined table
 if (length(results) > 0) {
   results_df <- bind_rows(lapply(results, function(x) {
     data.frame(
@@ -178,5 +140,6 @@ if (length(results) > 0) {
     )
   }), .id = "site")
   
-  write_csv(results_df, "data_out/results/EMIT_SpecDiv_2023.csv")
+  write_csv(results_df, "data_out/results_2024/EMIT_SpecDiv_2024.csv")
 }
+

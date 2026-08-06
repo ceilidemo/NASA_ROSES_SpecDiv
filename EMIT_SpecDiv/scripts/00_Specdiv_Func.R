@@ -1,17 +1,17 @@
-## 00_Specdiv_Func: functions for EMIT work
-# adapted from Ettienne's specdiv functions
-# source this code in scriot 01_EMIT_Run
+## 00_Specdiv_Func: terra-optimized functions for EMIT work
 
 # --- Brightness normalization for raster cubes ---
 bright_norm <- function(cube) {
-  require(raster)
+  library(terra)
   
-  mat <- as.matrix(cube)
+  mat <- values(cube, mat = TRUE)
+  mat[is.na(mat)] <- 0
   
   pixel_brightness <- sqrt(rowSums(mat^2, na.rm = TRUE))
   mat_norm <- sweep(mat, 1, pixel_brightness, "/")
   mat_norm[is.nan(mat_norm) | is.infinite(mat_norm)] <- NA
-  cube_norm <- brick(cube)
+  
+  cube_norm <- rast(cube)
   values(cube_norm) <- mat_norm
   
   return(cube_norm)
@@ -19,7 +19,7 @@ bright_norm <- function(cube) {
 
 # --- Sum of Squares ---
 sum_squares <- function(Y) {
-  Y <- as.matrix(Y)   # force numeric matrix
+  Y <- as.matrix(Y)   
   n <- nrow(Y)
   if (n < 2) return(list(ss = NA, sdiv = NA, fcsd = rep(NA, ncol(Y))))
   
@@ -32,21 +32,15 @@ sum_squares <- function(Y) {
   list(ss = SS.total, sdiv = sdiv, fcsd = fcsd)
 }
 
-# --- Dispersin Beta Diversity Function ---
+# --- Dispersion Beta Diversity Function ---
 beta_diversity_dispersion <- function(cube) {
-  require(raster)
-  require(tidyverse)
+  library(terra)
+  library(tidyverse)
   
-  cube_points <- rasterToPoints(cube, spatial = FALSE)
+  mat <- values(cube, mat = TRUE)
+  mat <- na.omit(mat)
   
-  if(is.list(cube_points)) { cube_points <- do.call(rbind, cube_points) }
-  cube_points <- as_tibble(cube_points)
-  
-  value_columns <- colnames(cube_points)[3:ncol(cube_points)]
-  cube_points_sel <- cube_points %>% dplyr::select(all_of(value_columns))
-  
-  cube_mat <- as.matrix(cube_points_sel)
-  sdiv_gamma <- sum_squares(cube_mat)
+  sdiv_gamma <- sum_squares(mat)
   
   output <- list(
     sum_squares = sdiv_gamma$ss,
@@ -58,29 +52,26 @@ beta_diversity_dispersion <- function(cube) {
 
 # --- Pairwise Beta Diversity Function ---
 beta_diversity_pairwise <- function(cube) {
-  require(raster)
-  require(vegan)
-  require(adespatial)
+  library(terra)
+  library(vegan)
+  library(adespatial)
   
-  cube_points_full <- rasterToPoints(cube, spatial = FALSE)
+  xy_full <- terra::xyFromCell(cube, 1:ncell(cube))
+  mat_full <- values(cube, mat = TRUE)
   
-  # force list back for large sites
-  if(is.list(cube_points_full)) { cube_points_full <- do.call(rbind, cube_points_full) }
-  
-  xy_full <- cube_points_full[, 1:2]
-  mat_full <- cube_points_full[, 3:ncol(cube_points_full)]
+  valid_idx <- complete.cases(mat_full)
+  xy_full <- xy_full[valid_idx, ]
+  mat_full <- mat_full[valid_idx, ]
   mat_full[mat_full < 0] <- 0
   n_pixels <- nrow(mat_full)
   
-  # calc map
   col_means <- colMeans(mat_full)
   sq_dist <- rowSums(sweep(mat_full, 2, col_means)^2)
   lcbd_vals <- sq_dist / sum(sq_dist)
   
   lcbd_df <- data.frame(x = xy_full[,1], y = xy_full[,2], lcbd = lcbd_vals)
-  lcbd_raster <- rasterFromXYZ(lcbd_df, crs = proj4string(cube))
+  lcbd_raster <- rast(lcbd_df, type = "xyz", crs = crs(cube))
   
-  # calc beta
   if (n_pixels > 30000) {
     message("huge site.. will take longer bc averaging")
     skip <- ceiling(sqrt(n_pixels / 30000))
@@ -98,8 +89,8 @@ beta_diversity_pairwise <- function(cube) {
 
 # --- Aggregated Spectral Diversity & Variance Partitioning ---
 beta_diversity_dispersion_aggregated <- function(cube, agg_factor = 10) {
-  require(raster)
-  require(tidyverse)
+  library(terra)
+  library(tidyverse)
   
   ncols <- ncol(cube)
   nrows <- nrow(cube)
@@ -112,24 +103,22 @@ beta_diversity_dispersion_aggregated <- function(cube, agg_factor = 10) {
     }
   }
   
-  cube_points <- rasterToPoints(cube, spatial = FALSE)
-  if(is.list(cube_points)) { cube_points <- do.call(rbind, cube_points) }
-  cube_points <- as_tibble(cube_points)
-  
-  value_columns <- colnames(cube_points)[3:ncol(cube_points)]
-  mat_gamma <- as.matrix(cube_points %>% dplyr::select(all_of(value_columns)))
-  
+  mat_gamma <- na.omit(values(cube, mat = TRUE))
   gamma_res <- sum_squares(mat_gamma)
   
-  cube_agg <- raster::aggregate(cube, fact = agg_factor, fun = mean, na.rm = TRUE)
-  
-  agg_points <- rasterToPoints(cube_agg, spatial = FALSE)
-  if(is.list(agg_points)) { agg_points <- do.call(rbind, agg_points) }
-  agg_points <- as_tibble(agg_points)
-  
-  mat_beta <- as.matrix(agg_points %>% dplyr::select(all_of(value_columns)))
+  cube_agg <- terra::aggregate(cube, fact = agg_factor, fun = mean, na.rm = TRUE)
+  mat_beta <- na.omit(values(cube_agg, mat = TRUE))
   
   beta_res <- sum_squares(mat_beta)
+  
+  xy_agg <- terra::xyFromCell(cube_agg, 1:ncell(cube_agg))
+  valid_agg <- complete.cases(values(cube_agg, mat = TRUE))
+  col_means_agg <- colMeans(mat_beta)
+  sq_dist_agg <- rowSums(sweep(mat_beta, 2, col_means_agg)^2)
+  lcbd_agg_vals <- sq_dist_agg / sum(sq_dist_agg)
+  
+  lcbd_agg_df <- data.frame(x = xy_agg[valid_agg, 1], y = xy_agg[valid_agg, 2], lcbd = lcbd_agg_vals)
+  lcbd_agg_raster <- rast(lcbd_agg_df, type = "xyz", crs = crs(cube))
   
   output <- list(
     agg_factor_used      = agg_factor,
@@ -139,7 +128,7 @@ beta_diversity_dispersion_aggregated <- function(cube, agg_factor = 10) {
     beta_agg_dispersion  = beta_res$sdiv,
     beta_agg_fcsd        = beta_res$fcsd,
     n_aggregate_pixels   = nrow(mat_beta),
-    lcbd_agg_map         = rasterFromXYZ(agg_points[, 1:2], crs = proj4string(cube))
+    lcbd_agg_map         = lcbd_agg_raster
   )
   
   return(output)
@@ -147,9 +136,9 @@ beta_diversity_dispersion_aggregated <- function(cube, agg_factor = 10) {
 
 # --- Pairwise Beta Diversity Function for Aggregates ---
 beta_diversity_pairwise_aggregated <- function(cube, agg_factor = 10) {
-  require(raster)
-  require(vegan)
-  require(adespatial)
+  library(terra)
+  library(vegan)
+  library(adespatial)
   
   ncols <- ncol(cube)
   nrows <- nrow(cube)
@@ -162,13 +151,13 @@ beta_diversity_pairwise_aggregated <- function(cube, agg_factor = 10) {
     }
   }
   
-  cube_agg <- raster::aggregate(cube, fact = agg_factor, fun = mean, na.rm = TRUE)
-  cube_points_full <- rasterToPoints(cube_agg, spatial = FALSE)
+  cube_agg <- terra::aggregate(cube, fact = agg_factor, fun = mean, na.rm = TRUE)
+  xy_full <- terra::xyFromCell(cube_agg, 1:ncell(cube_agg))
+  mat_full <- values(cube_agg, mat = TRUE)
   
-  if(is.list(cube_points_full)) { cube_points_full <- do.call(rbind, cube_points_full) }
-  
-  xy_full <- cube_points_full[, 1:2]
-  mat_full <- cube_points_full[, 3:ncol(cube_points_full)]
+  valid_idx <- complete.cases(mat_full)
+  xy_full <- xy_full[valid_idx, ]
+  mat_full <- mat_full[valid_idx, ]
   mat_full[mat_full < 0] <- 0
   n_pixels <- nrow(mat_full)
   
@@ -177,7 +166,7 @@ beta_diversity_pairwise_aggregated <- function(cube, agg_factor = 10) {
   lcbd_vals <- sq_dist / sum(sq_dist)
   
   lcbd_df <- data.frame(x = xy_full[,1], y = xy_full[,2], lcbd = lcbd_vals)
-  lcbd_raster <- rasterFromXYZ(lcbd_df, crs = proj4string(cube))
+  lcbd_raster <- rast(lcbd_df, type = "xyz", crs = crs(cube))
   
   if (n_pixels > 30000) {
     message("huge aggregate site.. will take longer bc averaging")
