@@ -248,15 +248,19 @@ topdown_fd_m2 <- topdown_ready %>%
 # -------------------------------------------------------------------------------------
 # Bring it together and save
 
-layered_final_all <- layered_master_table %>%
-  filter(siteID %in% sites_to_keep) %>%
-  left_join(layered_fd_m1, by = "siteID") %>%
-  left_join(layered_fd_m2, by = "siteID")
+all_sites <- tibble(siteID = unique(layered_ready$siteID)) # get thee sites
 
-topdown_final_all <- final_topdown_results %>%
-  filter(siteID %in% sites_to_keep) %>%
+layered_final_all <- all_sites %>%
+  left_join(layered_master_table, by = "siteID") %>%
+  left_join(layered_fd_m1, by = "siteID") %>%
+  left_join(layered_fd_m2, by = "siteID") %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
+
+topdown_final_all <- all_sites %>%
+  left_join(final_topdown_results, by = "siteID") %>%
   left_join(topdown_fd_m1, by = "siteID") %>%
-  left_join(topdown_fd_m2, by = "siteID")
+  left_join(topdown_fd_m2, by = "siteID") %>%
+  mutate(across(where(is.numeric), ~round(., 4)))
 
 write.csv(layered_final_all, "data_out/NEON_Layered_FullPlantDiv_2024.csv", row.names = FALSE)
 write.csv(topdown_final_all, "data_out/NEON_TopDown_FullPlantDiv_2024.csv", row.names = FALSE)

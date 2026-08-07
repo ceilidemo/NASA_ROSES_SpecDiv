@@ -5,6 +5,7 @@ library(tidyr)
 library(sf)
 library(purrr)
 library(vegan)
+library(sf)
 
 # Get community and phylo data
 load("data_work/community_2024.RData")
@@ -140,46 +141,69 @@ ggplot() +
     x = NULL, y = NULL
   )
 
-#### export canopy metrics
+######################################
+#### export canopy metrics / site info
 
+plot_height_metrics <- structure_all$vst_apparentindividual %>%
+  filter(!is.na(height)) %>%
+  group_by(plotID) %>%
+  summarise(
+    mean_canopy_height = mean(height, na.rm = TRUE),
+    max_canopy_height  = max(height, na.rm = TRUE),
+    sd_canopy_height   = sd(height, na.rm = TRUE),
+    mean_base_crown_ht = mean(baseCrownHeight, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Get plot-level elevation from perplotperyear
+plot_elevation <- structure_all$vst_perplotperyear %>%
+  select(plotID, elevation) %>%
+  distinct(plotID, .keep_all = TRUE)
+
+# num distributed plots per site
 site_plots_count <- plot_metadata %>%
   filter(plotType == "distributed") %>%
-  mutate(siteID = substr(plotID, 1, 4)) %>% 
+  mutate(siteID = substr(plotID, 1, 4)) %>%  
   group_by(siteID) %>%
   summarize(n_plots = n(), .groups = "drop")
 
-site_canopy_metrics <- canopy_visible %>%
+# Merge spatial with canopy
+canopy_shown_plots <- canopy_visible %>%
   st_drop_geometry() %>%
-  inner_join(plot_metadata %>% filter(plotType == "distributed") %>% dplyr::select(plotID), by = "plotID") %>%
+  inner_join(plot_metadata %>% filter(plotType == "distributed") %>% select(plotID), by = "plotID") %>%
+  left_join(plot_height_metrics, by = "plotID") %>%
+  left_join(plot_elevation, by = "plotID")
+
+# aggregate to site-level
+site_canopy_metrics <- canopy_shown_plots %>%
   group_by(siteID) %>%
   summarize(
-    total_visible_stems = n_distinct(individualID),
-    total_site_canopy_area = sum(visible_area, na.rm = TRUE),
+    total_visible_stems         = n_distinct(individualID),
+    total_site_canopy_area      = sum(visible_area, na.rm = TRUE),
+    mean_canopy_height_site     = mean(mean_canopy_height, na.rm = TRUE),
+    max_canopy_height_site      = max(max_canopy_height, na.rm = TRUE),
+    canopy_height_sd_site       = mean(sd_canopy_height, na.rm = TRUE),
+    mean_base_crown_height_site = mean(mean_base_crown_ht, na.rm = TRUE),
+    mean_elevation              = mean(elevation, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   left_join(site_plots_count, by = "siteID") %>%
   mutate(
     avg_visible_canopy_per_plot = total_site_canopy_area / n_plots,
-    
-    pct_visible_tree_cover = (avg_visible_canopy_per_plot / 400) * 100,
-    
-    visible_stems_per_ha = total_visible_stems / (n_plots * 0.04)
-  ) %>%
-  dplyr::select(
-    siteID, 
-    n_plots, 
-    total_visible_stems, 
-    avg_visible_canopy_per_plot, 
-    pct_visible_tree_cover, 
-    visible_stems_per_ha
+    pct_visible_tree_cover      = (avg_visible_canopy_per_plot / 400) * 100,
+    visible_stems_per_ha        = total_visible_stems / (n_plots * 0.04)
   )
 
+# clean and write
 final_site_info <- site_plots_count %>%
   left_join(site_canopy_metrics, by = c("siteID", "n_plots")) %>%
   mutate(across(
-    c(total_visible_stems, avg_visible_canopy_per_plot, pct_visible_tree_cover, visible_stems_per_ha),
+    c(total_visible_stems, avg_visible_canopy_per_plot, pct_visible_tree_cover, 
+      visible_stems_per_ha, mean_canopy_height_site, max_canopy_height_site, 
+      canopy_height_sd_site, mean_base_crown_height_site, mean_elevation),
     ~ replace_na(., 0)
   )) %>%
   mutate(across(where(is.numeric), ~ round(., 5)))
 
 write.csv(final_site_info, "data_out/Site_info_2024.csv", row.names = FALSE)
+

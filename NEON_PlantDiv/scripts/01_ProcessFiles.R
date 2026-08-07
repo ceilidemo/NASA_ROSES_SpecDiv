@@ -62,6 +62,7 @@ trees_df <- structure_all$vst_apparentindividual %>%
 plot_metadata <- structure_all$vst_perplotperyear %>% 
   select(plotID, plotType) %>% distinct()
 
+
 # save this compilation of most recent data
 save(ground_df, shrubs_df, trees_df, taxon_lookup, plot_metadata, structure_all,
      file = "data_work/community_2024.RData")
