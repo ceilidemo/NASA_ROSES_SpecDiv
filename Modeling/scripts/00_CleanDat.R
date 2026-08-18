@@ -5,9 +5,9 @@ library(dplyr)
 
 # -------------------------------------------------------------------------------------
 # Load the EMIT results for specdiv
-emit_2024 <- read.csv("EMIT_SpecDiv/data_out/results_2024/EMIT_SpecDiv_2024.csv") %>% 
+emit_2024 <- read.csv("EMIT_SpecDiv/data_out/results_2024/EMIT_SpecDiv_2024_new.csv") %>% 
   mutate(year = 2024)
-emit_2023 <- read.csv("EMIT_SpecDiv/data_out/results_2023/EMIT_SpecDiv_2023.csv") %>% 
+emit_2023 <- read.csv("EMIT_SpecDiv/data_out/results_2023/EMIT_SpecDiv_2023_new.csv") %>% 
   mutate(year = 2023)
 
 emit_data <- bind_rows(emit_2023, emit_2024) %>% 
@@ -16,7 +16,8 @@ emit_data <- bind_rows(emit_2023, emit_2024) %>%
     tile_num = if_else(is.na(str_extract(site, "\\d+$")), "1", str_extract(site, "\\d+$"))
   ) %>% 
   dplyr::select(siteID, year, tile_num, sum_squares, Beta_dispersion, Beta_avg_pairwise,
-                gamma_sum_squares, gamma_dispersion, beta_agg_sum_squares, beta_agg_dispersion, Beta_agg_avg_pairwise)
+                gamma_sum_squares, gamma_dispersion, beta_agg_sum_squares, beta_agg_dispersion, Beta_agg_avg_pairwise,
+                plot_sum_squares, plot_beta_dispersion, plot_avg_pairwise)
 
 # -------------------------------------------------------------------------------------
 # Load the NEON plant div results

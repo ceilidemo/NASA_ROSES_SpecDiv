@@ -6,12 +6,14 @@ library(psych)
 library(ggpubr)
 library(cluster)
 library(ggrepel)
+library(plotly)
 
 # Load data 
 dat <- read.csv("Modeling/data_work/Joined_Results.csv")
 
 spec_vars <- c("sum_squares", "Beta_dispersion", "Beta_avg_pairwise",
-               "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise" )
+               "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise",
+               "plot_sum_squares", "plot_beta_dispersion", "plot_avg_pairwise")
 
 site_vars <- c("n_plots", "total_visible_stems", "visible_stems_per_ha", 
                "avg_visible_canopy_per_plot", "pct_visible_tree_cover",
@@ -181,7 +183,7 @@ p_3d <- plot_ly(
   mode = "text+markers",
   marker = list(size = 5)
 ) %>%
-  layout(
+  plotly::layout(
     title = "3D Site Structural Clustering (k = 3)",
     scene = list(
       xaxis = list(title = "Percent Tree Cover (%)"),
