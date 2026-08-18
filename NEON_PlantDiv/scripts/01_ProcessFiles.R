@@ -178,4 +178,12 @@ save(foliar_all, neon_traits_site, neon_traits_fullCross, neon_traits_raw,
 write.csv(neon_traits_site,   "data_in/neon_traits_site_2024.csv",   row.names = FALSE)
 write.csv(neon_traits_fullCross, "data_in/neon_traits_fullCross_2024.csv", row.names = FALSE)
 
+###################################
+## Get plot Geolocation for EMIT ##
 
+plot_geolocations <- cover_all$div_1m2Data %>%
+  select(siteID, plotID, decimalLatitude, decimalLongitude, nlcdClass) %>%
+  distinct(plotID, .keep_all = TRUE) %>%
+  filter(!is.na(decimalLatitude) & !is.na(decimalLongitude))
+
+write.csv(plot_geolocations, "data_out/neon_plot_locations_cover.csv", row.names = FALSE)
