@@ -9,7 +9,8 @@ dat <- read.csv("Modeling/data_work/Joined_Results.csv")
 
 # group variables...
 spec_vars <- c("sum_squares", "Beta_dispersion", "Beta_avg_pairwise", "gamma_sum_squares",
-  "gamma_dispersion", "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise" )
+  "gamma_dispersion", "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise" ,
+  "plot_sum_squares", "plot_beta_dispersion", "plot_avg_pairwise")
 
 layered_vars <- c("TD_Richness_Layered", "TD_Shannon_Eff_Layered", "TD_Simpson_Eff_Layered", "TD_Beta_Bray_Layered",
   "TD_Beta_Dispersion_Layered", "PD_Faith_Layered", "PD_Beta_Sorensen_Layered", "PD_Beta_Dispersion_Layered",

@@ -9,8 +9,9 @@ library(ggpubr)
 dat <- read.csv("Modeling/data_work/Joined_Results.csv")
 
 # Define spectral variables
-spec_vars_use <- c("sum_squares", "Beta_dispersion", "Beta_avg_pairwise", 
-                   "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise")
+spec_vars <- c("sum_squares", "Beta_dispersion", "Beta_avg_pairwise", "gamma_sum_squares",
+               "gamma_dispersion", "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise" ,
+               "plot_sum_squares", "plot_beta_dispersion", "plot_avg_pairwise")
 
 # Define top-down plant variables
 topdown_vars <- c("TD_Richness_TopDown", "TD_Shannon_Eff_TopDown", "TD_Simpson_Eff_TopDown", "TD_Beta_Bray_TopDown", 
@@ -22,7 +23,7 @@ topdown_vars <- c("TD_Richness_TopDown", "TD_Shannon_Eff_TopDown", "TD_Simpson_E
 # -------------------------------------------------------------------------------------
 # Global corr test
 global_cor_res <- psych::corr.test(
-  dat[, spec_vars_use], 
+  dat[, spec_vars], 
   dat[, topdown_vars], 
   method = "pearson", 
   adjust = "none"
@@ -43,8 +44,8 @@ significant_pairs <- all_pairs_long %>% filter(p_val < 0.05)
 # -------------------------------------------------------------------------------------
 # plot em
 plot_ready_all <- dat %>%
-  dplyr::select(siteID, pct_visible_tree_cover, all_of(spec_vars_use), all_of(topdown_vars)) %>%
-  pivot_longer(cols = all_of(spec_vars_use), names_to = "Spectral_Metric", values_to = "Spectral_Value") %>%
+  dplyr::select(siteID, pct_visible_tree_cover, all_of(spec_vars), all_of(topdown_vars)) %>%
+  pivot_longer(cols = all_of(spec_vars), names_to = "Spectral_Metric", values_to = "Spectral_Value") %>%
   pivot_longer(cols = all_of(topdown_vars), names_to = "Plant_Metric", values_to = "Plant_Value")
 
 plot_ready_all_merged <- plot_ready_all %>%

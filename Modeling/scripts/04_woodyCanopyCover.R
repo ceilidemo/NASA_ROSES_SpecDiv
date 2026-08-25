@@ -10,8 +10,9 @@ library(ggrepel)
 # Load data 
 dat <- read.csv("Modeling/data_work/Joined_Results.csv")
 
-spec_vars <- c("sum_squares", "Beta_dispersion", "Beta_avg_pairwise",
-               "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise" )
+spec_vars <- c("sum_squares", "Beta_dispersion", "Beta_avg_pairwise", "gamma_sum_squares",
+               "gamma_dispersion", "beta_agg_sum_squares", "beta_agg_dispersion", "Beta_agg_avg_pairwise" ,
+               "plot_sum_squares", "plot_beta_dispersion", "plot_avg_pairwise")
 
 site_vars <- c("n_plots", "total_visible_stems", "visible_stems_per_ha", 
                "avg_visible_canopy_per_plot", "pct_visible_tree_cover",
