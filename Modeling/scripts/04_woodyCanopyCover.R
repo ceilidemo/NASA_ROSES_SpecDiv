@@ -109,7 +109,7 @@ sig_topdown_plot <- ggplot(plot_ready_sig, aes(x = Spectral_Value, y = Plant_Val
   )
 
 print(sig_topdown_plot)
-ggsave("Modeling/figures/significant_woody_pairs.jpg", sig_topdown_plot, width = 13, height = 10, dpi = 300)
+#ggsave("Modeling/figures/significant_woody_pairs.jpg", sig_topdown_plot, width = 13, height = 10, dpi = 300)
 
 # -------------------------------------------------------------------------------------
 # site variable correlations and choice

@@ -4,11 +4,7 @@ library(ggeffects)
 library(broom)
 library(ggpubr)
 
-# 1. Ensure output directories exist
-dir.create("Modeling/figures", showWarnings = FALSE, recursive = TRUE)
-dir.create("Modeling/data_out", showWarnings = FALSE, recursive = TRUE)
-
-# 2. Ensure data is scaled and prepared
+# Scale and prep data
 dat_model <- dat %>%
   mutate(
     scaled_tree_cover = as.numeric(scale(pct_visible_tree_cover)),
@@ -27,7 +23,7 @@ topdown_vars <- c("PD_Faith_TopDown", "PD_Beta_Sorensen_TopDown", "PD_Beta_Dispe
                   "FD_FDis_m1_TopDown", "FD_RaoQ_m1_TopDown", "FD_Beta_Dispersion_m1_TopDown", "FD_Beta_Turnover_m1_TopDown")
 
 
-# 3. Function to fit models and extract ONE row of summary stats per model
+# Fit models and pull sum stats
 run_model_summary <- function(spec, plant) {
   formula_str <- paste0(plant, " ~ ", spec, " * scaled_tree_cover + scaled_canopy_height")
   
@@ -53,7 +49,7 @@ run_model_summary <- function(spec, plant) {
   }
 }
 
-# 4. Execute across combinations to get a clean summary table
+# Sum table
 model_summary_table <- expand_grid(spec = spec_vars_use, plant = topdown_vars) %>%
   pmap_dfr(~ run_model_summary(.x, .y))
 
@@ -64,7 +60,7 @@ if(nrow(model_summary_table) == 0) {
 # Save CSV backup
 write.csv(model_summary_table, "Modeling/data_out/significant_lmm_model_summary_layered.csv", row.names = FALSE)
 
-# 5. Format a clean display table for the JPG image
+# Display
 display_table_df <- model_summary_table %>%
   rename(
     "Plant Metric" = Plant_Metric,
@@ -74,7 +70,7 @@ display_table_df <- model_summary_table %>%
     "Model p-value" = Model_P_Value
   )
 
-# 6. Build the compact table plot and preview it
+# Table plot
 table_plot <- ggtexttable(
   display_table_df, 
   rows = NULL, 
@@ -85,7 +81,6 @@ table_plot <- ggtexttable(
   )
 )
 
-# Preview in RStudio plots pane
 print(table_plot)
 
 # Save as JPG
@@ -128,7 +123,7 @@ all_plant_vars <- c(
   setNames(layered_vars, rep("Layered", length(layered_vars)))
 )
 
-# 3. Function to fit models and extract summary stats
+#  Fit models and get sum stats
 run_model_summary <- function(spec, plant, extraction_type) {
   formula_str <- paste0(plant, " ~ ", spec, " * scaled_tree_cover + scaled_canopy_height")
   
@@ -163,7 +158,7 @@ run_model_summary <- function(spec, plant, extraction_type) {
   }
 }
 
-# 4. Execute across all combinations
+# Do it for all combs
 model_summary_table <- imap_dfr(all_plant_vars, function(plant_var, type_label) {
   expand_grid(spec = spec_vars_use, plant = plant_var) %>%
     pmap_dfr(~ run_model_summary(.x, .y, type_label))
@@ -175,7 +170,7 @@ if(nrow(model_summary_table) == 0) {
 
 write.csv(model_summary_table, "Modeling/data_out/significant_lmm_model_summary_combined.csv", row.names = FALSE)
 
-# 5. Build the Heatmap with custom gradient colors
+# heatmap go time
 heatmap_plot <- ggplot(model_summary_table, aes(x = Spectral_Metric, y = Plant_Metric, fill = Adj_R_squared)) +
   geom_tile(color = "white", linewidth = 0.5) +
   geom_text(aes(label = Significance), color = "black", size = 4.5, vjust = 0.7) +
@@ -204,7 +199,6 @@ heatmap_plot <- ggplot(model_summary_table, aes(x = Spectral_Metric, y = Plant_M
     y = "NEON Plant Metric"
   )
 
-# Preview in RStudio plots pane
 print(heatmap_plot)
 
 # Save as JPG

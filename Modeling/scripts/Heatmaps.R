@@ -1,14 +1,8 @@
 # 05_Summary_Figs
-
-
-
 library(tidyverse)
 library(ggplot2)
 
-# Assuming 'all_groups_cor_df' is already generated from your loop:
-# It should contain columns: Spectral_Metric, Plant_Metric, Structural_Group, Correlation, p_val, Significance
-
-# 1. Filter or clean metric names for better axis labels if desired
+# Filter or clean metric names for better axis labels if desired
 heatmap_dat <- all_groups_cor_df %>%
   mutate(
     # Add an asterisk or label for significance
@@ -20,7 +14,7 @@ heatmap_dat <- all_groups_cor_df %>%
     Plant_Metric = str_remove(Plant_Metric, "_TopDown|_Layered")
   )
 
-# 2. Build the heatmap plot faceted by Structural Group
+# Build the heatmap plot faceted by Structural Group
 summary_heatmap <- ggplot(heatmap_dat, aes(x = Spectral_Metric, y = Plant_Metric, fill = Correlation)) +
   geom_tile(color = "white", linewidth = 0.5) +
   # Add asterisks for significant correlations
@@ -119,7 +113,7 @@ get_cor_df <- function(df, group_label) {
     )
 }
 
-# 1. All Sites correlation
+# All Sites correlation
 all_sites_df <- get_cor_df(dat_analysis, "All Sites")
 
 # 2. Group-specific correlations
